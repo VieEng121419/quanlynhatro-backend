@@ -1,0 +1,137 @@
+// Config MySQL connection
+datasource db {
+  provider = "mysql"
+}
+
+generator client {
+  provider = "prisma-client-js"
+  moduleFormat    = "cjs"
+}
+
+// 1. Quản lý chủ nhà (SaaS Ready)
+model Landlord {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  password  String
+  branches  Branch[] 
+  createdAt DateTime @default(now())
+}
+
+// 2. Quản lý Dãy trọ
+model Branch {
+  id          Int      @id @default(autoincrement())
+  name        String   
+  address     String?
+  landlordId  Int
+  landlord    Landlord @relation(fields: [landlordId], references: [id])
+  rooms       Room[]
+  expenses    Expense[] 
+}
+
+// 3. Quản lý Phòng
+model Room {
+  id          Int      @id @default(autoincrement())
+  roomNumber  String   
+  status      RoomStatus @default(EMPTY) 
+  branchId    Int
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  contracts   Contract[]
+  roomTabs    RoomTab[] 
+}
+
+enum RoomStatus {
+  EMPTY
+  OCCUPIED
+  MAINTENANCE
+}
+
+// 4. Hợp đồng (Đã cập nhật tính năng phụ thu nhân khẩu)
+model Contract {
+  id                Int       @id @default(autoincrement())
+  roomId            Int
+  room              Room      @relation(fields: [roomId], references: [id])
+  tenantName        String
+  tenantPhone       String?
+  startDate         DateTime
+  endDate           DateTime?
+  rentPrice         Decimal   @db.Decimal(10, 2) // Giá phòng gốc
+  depositAmount     Decimal   @db.Decimal(10, 2) @default(0)
+  billingCycleDay   Int       @default(10) 
+  
+  // --- PHẦN CẬP NHẬT PHỤ THU ---
+  activePeopleCount Int       @default(2)        // Số người hiện tại đang ở trong phòng
+  basePeopleLimit   Int       @default(2)        // Giới hạn người tối đa không bị tính thêm tiền
+  extraPersonFee    Decimal   @db.Decimal(10, 2) @default(100000.00) // Phí cộng thêm cho mỗi người vượt giới hạn
+  // -----------------------------
+
+  invoices          Invoice[]
+  isActive          Boolean   @default(true)
+}
+
+// 5. Sổ nợ tiền hàng (Mua nước, đá, tạp hóa lẻ...)
+model RoomTab {
+  id          Int      @id @default(autoincrement())
+  roomId      Int
+  room        Room     @relation(fields: [roomId], references: [id])
+  description String   
+  amount      Decimal  @db.Decimal(10, 2)
+  status      TabStatus @default(PENDING) 
+  invoiceId   Int?     
+  invoice     Invoice? @relation(fields: [invoiceId], references: [id])
+  createdAt   DateTime @default(now())
+}
+
+enum TabStatus {
+  PENDING
+  INVOICED
+}
+
+// 6. Hóa đơn (Invoices)
+model Invoice {
+  id              Int           @id @default(autoincrement())
+  contractId      Int
+  contract        Contract      @relation(fields: [contractId], references: [id])
+  
+  fromDate        DateTime
+  toDate          DateTime
+  
+  oldElectric     Int           @default(0)
+  newElectric     Int
+  oldWater        Int           @default(0)
+  newWater        Int
+  
+  // --- SNAPSHOT SỐ NGƯỜI KỲ NÀY ---
+  peopleCountSnapshot Int         @default(2) // Lưu lại số người ở tại tháng này để đối chiếu lịch sử
+  // ---------------------------------
+
+  rentAmount      Decimal       @db.Decimal(10, 2) // Tiền phòng thực tế (Gồm giá gốc + Tiền phụ thu người)
+  serviceAmount   Decimal       @db.Decimal(10, 2) @default(0) 
+  tabAmount       Decimal       @db.Decimal(10, 2) @default(0) 
+  debtAmount      Decimal       @db.Decimal(10, 2) @default(0) 
+  totalAmount     Decimal       @db.Decimal(10, 2) 
+  
+  paidAmount      Decimal       @db.Decimal(10, 2) @default(0)
+  status          InvoiceStatus @default(UNPAID)
+  
+  roomTabs        RoomTab[]
+  createdAt       DateTime      @default(now())
+}
+
+enum InvoiceStatus {
+  DRAFT
+  UNPAID
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+// 7. Chi phí vận hành
+model Expense {
+  id          Int      @id @default(autoincrement())
+  branchId    Int
+  branch      Branch   @relation(fields: [branchId], references: [id])
+  description String
+  amount      Decimal  @db.Decimal(10, 2)
+  expenseDate DateTime @default(now())
+}
