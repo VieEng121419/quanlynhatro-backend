@@ -6,6 +6,8 @@ import { ConfigModule } from '@nestjs/config';
 import { LandlordModule } from './landlord/landlord.module';
 import { BranchsModule } from './branchs/branchs.module';
 import { RoomsModule } from './rooms/rooms.module';
+import { ContractModule } from './contract/contract.module';
+import { InvoiceModule } from './invoice/invoice.module';
 
 @Module({
   imports: [
@@ -14,6 +16,8 @@ import { RoomsModule } from './rooms/rooms.module';
     LandlordModule,
     BranchsModule,
     RoomsModule,
+    ContractModule,
+    InvoiceModule,
   ],
   controllers: [AppController],
   providers: [AppService],
