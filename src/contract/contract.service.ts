@@ -1,10 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateContractDto } from './dto/create-contract.dto';
+import { TerminateContractDto } from './dto/terminate-contract.dto';
 
 @Injectable()
 export class ContractService {
   constructor(private readonly prisma: PrismaService) {}
+
+  private readonly logger = new Logger();
 
   async create(createContractDto: CreateContractDto) {
     const {
@@ -57,6 +65,148 @@ export class ContractService {
       });
 
       return contract;
+    });
+  }
+
+  async terminate(contractId: number, dto: TerminateContractDto) {
+    const { finalElectric, finalWater } = dto;
+    const today = new Date();
+    this.logger.log('today...', today);
+
+    const contract = await this.prisma.contract.findUnique({
+      where: { id: contractId },
+      include: { room: true },
+    });
+
+    if (!contract || !contract.isActive) {
+      throw new BadRequestException(
+        'Hợp đồng không tồn tại hoặc đã được thanh lý từ trước.',
+      );
+    }
+
+    const lastInvoice = await this.prisma.invoice.findFirst({
+      where: { contractId: contract.id },
+      orderBy: { toDate: 'desc' },
+    });
+
+    const cycleStartDate = lastInvoice
+      ? new Date(lastInvoice.toDate)
+      : new Date(contract.startDate);
+
+    this.logger.log('cycleStartDate...', cycleStartDate);
+
+    const oldElectric = lastInvoice ? lastInvoice.newElectric : 0;
+    const oldWater = lastInvoice ? lastInvoice.newWater : 0;
+
+    if (finalElectric < oldElectric || finalWater < oldWater) {
+      throw new BadRequestException(
+        `Số điện nước cuối kỳ phải lớn hơn hoặc bằng đầu kỳ (Điện cũ: ${oldElectric}, Nước cũ: ${oldWater})`,
+      );
+    }
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    // Tính số ngày khách ở thực tế trong chu kỳ này
+    const daysOccupied =
+      Math.ceil((today.getTime() - cycleStartDate.getTime()) / msPerDay) || 1;
+
+    this.logger.log('daysOccupied...', daysOccupied);
+    // Lấy tổng số ngày của tháng hiện tại để chia tỷ lệ cho chuẩn
+    const daysInCurrentMonth = new Date(
+      today.getFullYear(),
+      today.getMonth() + 1,
+      0,
+    ).getDate();
+
+    const baseRent = Number(contract.rentPrice);
+    const proratedRent = Math.round(
+      (baseRent / daysInCurrentMonth) * daysOccupied,
+    );
+
+    const electricUsage = finalElectric - oldElectric;
+    const waterUsage = finalWater - oldWater;
+    const electricCost = electricUsage * 4000; // Giả định giá điện 4k
+    const waterCost = waterUsage * 15000; // Giả định giá nước 15k
+    const totalServiceCost = electricCost + waterCost;
+
+    let debtAmount = 0;
+    if (lastInvoice && lastInvoice.status !== 'PAID') {
+      debtAmount =
+        Number(lastInvoice.totalAmount) - Number(lastInvoice.paidAmount);
+    }
+
+    const pendingTabs = await this.prisma.roomTab.findMany({
+      where: { roomId: contract.roomId, invoiceId: null },
+    });
+    const totalTabAmount = pendingTabs.reduce(
+      (sum, tab) => sum + Number(tab.amount),
+      0,
+    );
+    //TỔNG CHI PHÍ KHÁCH PHẢI TRẢ CUỐI CÙNG
+    const totalBillCost =
+      proratedRent + totalServiceCost + totalTabAmount + debtAmount;
+
+    const deposit = Number(contract.depositAmount);
+    const finalSettlement = deposit - totalBillCost;
+
+    return await this.prisma.$transaction(async (tx) => {
+      const finalInvoice = await tx.invoice.create({
+        data: {
+          contractId: contract.id,
+          fromDate: cycleStartDate,
+          toDate: today,
+          oldElectric,
+          newElectric: finalElectric,
+          oldWater,
+          newWater: finalWater,
+          peopleCountSnapshot: contract.activePeopleCount || 1,
+          rentAmount: proratedRent,
+          serviceAmount: totalServiceCost,
+          debtAmount: debtAmount,
+          tabAmount: totalTabAmount,
+          totalAmount: totalBillCost,
+          status: 'UNPAID', // Chờ xử lý thanh toán sòng phẳng rồi chuyển PAID sau
+        },
+      });
+
+      if (pendingTabs.length > 0) {
+        await tx.roomTab.updateMany({
+          where: { id: { in: pendingTabs.map((t) => t.id) } },
+          data: { invoiceId: finalInvoice.id, status: 'INVOICED' },
+        });
+      }
+
+      await tx.contract.update({
+        where: { id: contractId },
+        data: {
+          isActive: false,
+          endDate: today,
+          // Lưu vết lý do trả phòng nếu muốn
+        },
+      });
+
+      await tx.room.update({
+        where: { id: contract.roomId },
+        data: { status: 'EMPTY' },
+      });
+
+      return {
+        message: 'Thanh lý hợp đồng thành công. Phòng đã được giải phóng.',
+        summary: {
+          daysOccupied,
+          proratedRent,
+          totalServiceCost,
+          totalTabAmount,
+          debtAmount,
+          totalBillCost,
+          depositAmount: deposit,
+          finalSettlement: finalSettlement,
+          actionRequired:
+            finalSettlement >= 0
+              ? `Chủ nhà cần trả lại ${finalSettlement}đ tiền cọc thừa cho khách`
+              : `Khách cần đóng thêm ${Math.abs(finalSettlement)}đ mới hoàn tất thủ tục trả phòng`,
+        },
+        finalInvoiceId: finalInvoice.id,
+      };
     });
   }
 }

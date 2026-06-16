@@ -8,6 +8,8 @@ import { BranchsModule } from './branchs/branchs.module';
 import { RoomsModule } from './rooms/rooms.module';
 import { ContractModule } from './contract/contract.module';
 import { InvoiceModule } from './invoice/invoice.module';
+import { ScheduleModule } from '@nestjs/schedule';
+import { RoomTabModule } from './room-tab/room-tab.module';
 
 @Module({
   imports: [
@@ -18,6 +20,8 @@ import { InvoiceModule } from './invoice/invoice.module';
     RoomsModule,
     ContractModule,
     InvoiceModule,
+    ScheduleModule.forRoot(),
+    RoomTabModule,
   ],
   controllers: [AppController],
   providers: [AppService],
