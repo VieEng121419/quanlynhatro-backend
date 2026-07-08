@@ -7,6 +7,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateContractDto } from './dto/create-contract.dto';
 import { TerminateContractDto } from './dto/terminate-contract.dto';
+import { UpdateContractDto } from './dto/update-contract.dto';
 
 @Injectable()
 export class ContractService {
@@ -66,6 +67,58 @@ export class ContractService {
 
       return contract;
     });
+  }
+
+  async update(id: number, dto: UpdateContractDto) {
+    // 1. Kiểm tra xem hợp đồng có tồn tại không
+    const existingContract = await this.prisma.contract.findUnique({
+      where: { id },
+    });
+
+    if (!existingContract) {
+      throw new NotFoundException(`Không tìm thấy hợp đồng có ID #${id}`);
+    }
+
+    try {
+      // 2. Chạy Transaction để đảm bảo tính toàn vẹn dữ liệu giữa Contract và Room
+      return await this.prisma.$transaction(async (tx) => {
+        // Cập nhật thông tin hợp đồng
+        const updatedContract = await tx.contract.update({
+          where: { id },
+          data: {
+            rentPrice: dto.rentPrice,
+            depositAmount: dto.deposit,
+            extraPersonFee: dto.extraPersonFee,
+            endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+            isActive: dto.isActive,
+          },
+        });
+
+        // 💡 LOGIC ĐẶC BIỆT: Nếu hợp đồng bị chuyển sang hủy/hết hạn (isActive = false)
+        // Thì tự động giải phóng phòng đó về trạng thái EMPTY
+        if (dto.isActive === false) {
+          await tx.room.update({
+            where: { id: existingContract.roomId },
+            data: { status: 'EMPTY' },
+          });
+        }
+
+        // Ngược lại, nếu kích hoạt lại hợp đồng (isActive = true) thì đưa phòng thành OCCUPIED
+        if (dto.isActive === true) {
+          await tx.room.update({
+            where: { id: existingContract.roomId },
+            data: { status: 'OCCUPIED' },
+          });
+        }
+
+        return updatedContract;
+      });
+    } catch (error) {
+      console.error('❌ LỖI UPDATE CONTRACT:', error);
+      throw new BadRequestException(
+        'Cập nhật hợp đồng thất bại, vui lòng kiểm tra lại dữ liệu!',
+      );
+    }
   }
 
   async terminate(contractId: number, dto: TerminateContractDto) {
