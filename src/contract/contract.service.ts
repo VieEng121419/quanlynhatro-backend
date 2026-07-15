@@ -71,6 +71,7 @@ export class ContractService {
 
   async update(id: number, dto: UpdateContractDto) {
     // 1. Kiểm tra xem hợp đồng có tồn tại không
+    this.logger.log('dto', dto);
     const existingContract = await this.prisma.contract.findUnique({
       where: { id },
     });
@@ -87,29 +88,35 @@ export class ContractService {
           where: { id },
           data: {
             rentPrice: dto.rentPrice,
-            depositAmount: dto.deposit,
+            depositAmount: dto.depositAmount,
             extraPersonFee: dto.extraPersonFee,
+            activePeopleCount: dto.activePeopleCount,
+            basePeopleLimit: dto.basePeopleLimit,
+            tenantName: dto.tenantName,
+            tenantPhone: dto.tenantPhone,
+            billingCycleDay: dto.billingCycleDay,
+            startDate: dto.startDate ? new Date(dto.startDate) : undefined,
             endDate: dto.endDate ? new Date(dto.endDate) : undefined,
-            isActive: dto.isActive,
+            // isActive: dto.isActive,
           },
         });
 
         // 💡 LOGIC ĐẶC BIỆT: Nếu hợp đồng bị chuyển sang hủy/hết hạn (isActive = false)
         // Thì tự động giải phóng phòng đó về trạng thái EMPTY
-        if (dto.isActive === false) {
-          await tx.room.update({
-            where: { id: existingContract.roomId },
-            data: { status: 'EMPTY' },
-          });
-        }
+        // if (dto.isActive === false) {
+        //   await tx.room.update({
+        //     where: { id: existingContract.roomId },
+        //     data: { status: 'EMPTY' },
+        //   });
+        // }
 
         // Ngược lại, nếu kích hoạt lại hợp đồng (isActive = true) thì đưa phòng thành OCCUPIED
-        if (dto.isActive === true) {
-          await tx.room.update({
-            where: { id: existingContract.roomId },
-            data: { status: 'OCCUPIED' },
-          });
-        }
+        // if (dto.isActive === true) {
+        //   await tx.room.update({
+        //     where: { id: existingContract.roomId },
+        //     data: { status: 'OCCUPIED' },
+        //   });
+        // }
 
         return updatedContract;
       });
@@ -261,5 +268,34 @@ export class ContractService {
         finalInvoiceId: finalInvoice.id,
       };
     });
+  }
+
+  async findOne(id: number) {
+    // Bốc chi tiết hợp đồng và kéo theo các mối quan hệ liên quan
+    const contract = await this.prisma.contract.findUnique({
+      where: { id },
+      include: {
+        room: {
+          select: {
+            id: true,
+            roomNumber: true,
+          },
+        },
+        invoices: {
+          select: {
+            id: true,
+            newElectric: true,
+            newWater: true,
+          },
+        },
+      },
+    });
+
+    // Nếu không tìm thấy hợp đồng, văng lỗi 404 ngay lập tức
+    if (!contract) {
+      throw new NotFoundException(`Không tìm thấy hợp đồng có ID #${id}!`);
+    }
+
+    return contract;
   }
 }

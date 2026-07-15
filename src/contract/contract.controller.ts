@@ -1,6 +1,8 @@
 import {
   Body,
   Controller,
+  Get,
+  Logger,
   Param,
   ParseIntPipe,
   Post,
@@ -14,6 +16,8 @@ import { UpdateContractDto } from './dto/update-contract.dto';
 @Controller('contract')
 export class ContractController {
   constructor(private readonly contractService: ContractService) {}
+
+  private readonly logger = new Logger();
 
   @Post()
   async createContract(@Body() createContractDto: CreateContractDto) {
@@ -44,11 +48,23 @@ export class ContractController {
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateContractDto,
   ) {
+    this.logger.log('DTO CONTRLLER', dto);
     const result = await this.contractService.update(id, dto);
     return {
       success: true,
       statusCode: 200,
       message: `Cập nhật hợp đồng #${id} thành công!`,
+      data: result,
+    };
+  }
+
+  @Get(':id')
+  async getContractDetail(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.contractService.findOne(id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Lấy chi tiết hợp đồng #${id} thành công!`,
       data: result,
     };
   }

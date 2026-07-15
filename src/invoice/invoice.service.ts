@@ -108,4 +108,28 @@ export class InvoiceService {
       },
     });
   }
+
+  async findOne(id: number) {
+    const invoice = await this.prisma.invoice.findUnique({
+      where: { id },
+      include: {
+        contract: {
+          select: {
+            id: true,
+          },
+        },
+        // 💡 NẾU MÀY CÓ BẢNG LƯU CHI TIẾT ĐIỆN NƯỚC (Ví dụ đặt tên là InvoiceItem hoặc InvoiceDetail)
+        // Thì include nó vào đây để Frontend vẽ ra cái bảng chi tiết tiền
+        // items: true
+      },
+    });
+
+    if (!invoice) {
+      throw new NotFoundException(
+        `Không tìm thấy hóa đơn có ID #${id} đâu fency!`,
+      );
+    }
+
+    return invoice;
+  }
 }

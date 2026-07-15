@@ -10,7 +10,7 @@ export class InvoiceCronService {
   constructor(private readonly prisma: PrismaService) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  //   @Cron('*/10 * * * * *')
+  // @Cron('*/10 * * * * *')
   async handleMonthlyInvoiceGeneration() {
     this.logger.log('Generating monthly invoices...');
     // Logic to generate monthly invoices
@@ -110,7 +110,7 @@ export class InvoiceCronService {
             newWater: oldWater,
             debtAmount,
             peopleCountSnapshot: contract.activePeopleCount || 2,
-            rentAmount: 0,
+            rentAmount: contract?.rentPrice || 0,
             serviceAmount: 0,
             tabAmount: totalPendingTabAmount,
             totalAmount: debtAmount,

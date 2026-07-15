@@ -3,30 +3,60 @@ import {
   IsNumber,
   Min,
   IsDateString,
-  IsBoolean,
+  // IsBoolean,
+  IsInt,
+  Max,
+  IsString,
 } from 'class-validator';
 
 export class UpdateContractDto {
+  @IsOptional()
+  @IsString()
+  tenantName?: string;
+
+  @IsOptional()
+  @IsString()
+  tenantPhone?: string;
+
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  @IsOptional()
-  rentPrice?: number; // Sửa giá thuê thực tế thỏa thuận lại với khách
+  rentPrice?: number;
 
+  @IsOptional()
   @IsNumber()
   @Min(0)
-  @IsOptional()
-  deposit?: number; // Sửa lại số tiền cọc (nếu khách đóng thêm hoặc rút bớt)
+  depositAmount?: number;
 
-  @IsNumber()
-  @Min(0)
   @IsOptional()
-  extraPersonFee?: number; // Sửa phụ phí nếu có người dọn vào ở thêm hoặc dời đi
-
   @IsDateString()
-  @IsOptional()
-  endDate?: string; // Gia hạn hợp đồng (đổi ngày kết thúc)
+  startDate?: string;
 
-  @IsBoolean()
   @IsOptional()
-  isActive?: boolean; // Bật/tắt thủ công trạng thái hiệu lực của hợp đồng
+  @IsDateString()
+  endDate?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(31)
+  billingCycleDay?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  extraPersonFee?: number;
+
+  @IsOptional()
+  @IsInt()
+  activePeopleCount?: number;
+
+  @IsOptional()
+  @IsInt()
+  basePeopleLimit?: number;
+
+  // Thanh lý nên tách riêng, không để ở đây
+  // @IsOptional()
+  // @IsBoolean()
+  // isActive?: boolean;
 }

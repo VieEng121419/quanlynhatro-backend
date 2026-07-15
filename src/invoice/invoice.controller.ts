@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   Param,
   ParseIntPipe,
   Patch,
@@ -42,6 +43,17 @@ export class InvoiceController {
           ? 'Hoá đơn đã đã được thanh toán hoàn tất'
           : 'Hoá đơn đã được thành toán một phần, còn lại sẽ được ghi nợ',
       data,
+    };
+  }
+
+  @Get(':id')
+  async getInvoiceDetail(@Param('id', ParseIntPipe) id: number) {
+    const result = await this.invoiceService.findOne(id);
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Lấy chi tiết hóa đơn #${id} thành công!`,
+      data: result,
     };
   }
 }
