@@ -10,6 +10,7 @@ import {
 import { InvoiceService } from './invoice.service';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
+import { ChangeStatusDto } from './dto/change-status.dto';
 
 @Controller('invoice')
 export class InvoiceController {
@@ -53,6 +54,20 @@ export class InvoiceController {
       success: true,
       statusCode: 200,
       message: `Lấy chi tiết hóa đơn #${id} thành công!`,
+      data: result,
+    };
+  }
+
+  @Patch(':id/status')
+  async changeStatus(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: ChangeStatusDto,
+  ) {
+    const result = await this.invoiceService.changeStatus(id, dto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: `Cập nhật trạng thái hóa đơn #${id} thành công!`,
       data: result,
     };
   }

@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
+import { ChangeStatusDto, InvoiceStatus } from './dto/change-status.dto';
 
 @Injectable()
 export class InvoiceService {
@@ -34,7 +39,7 @@ export class InvoiceService {
     }
 
     const ELECTRIC_PRICE = 3500; // 3.500 đ/kwh
-    const WATER_PRICE = 15000; // 15.000 đ/m3
+    const WATER_PRICE = 7000; // 15.000 đ/m3
 
     const electricUsage = newElectric - invoice.oldElectric;
     const electricCost = electricUsage * ELECTRIC_PRICE;
@@ -131,5 +136,71 @@ export class InvoiceService {
     }
 
     return invoice;
+  }
+
+  async changeStatus(id: number, dto: ChangeStatusDto) {
+    const invoice = await this.prisma.invoice.findUnique({ where: { id } });
+    if (!invoice)
+      throw new NotFoundException(`Không tìm thấy hóa đơn có ID #${id}`);
+
+    const total = invoice.totalAmount.toNumber();
+    const paidAmount = dto.paidAmount ?? invoice.paidAmount.toNumber();
+
+    // 1. Reset tiền về 0 nếu FE chủ động chuyển về UNPAID
+    if (dto.status === InvoiceStatus.UNPAID) {
+      return await this.prisma.invoice.update({
+        where: { id },
+        data: { status: InvoiceStatus.UNPAID, paidAmount: 0 },
+      });
+    }
+
+    if (dto.status === InvoiceStatus.CANCELLED) {
+      return await this.prisma.invoice.update({
+        where: { id },
+        data: {
+          status: InvoiceStatus.CANCELLED,
+          paidAmount: invoice.paidAmount.toNumber(),
+        },
+      });
+    }
+
+    // 2. Kiểm tra bắt buộc phải có số tiền khi xử lý thanh toán
+    if (dto.paidAmount === undefined || dto.paidAmount === null) {
+      throw new BadRequestException(
+        'Bắt buộc phải kèm theo số tiền thực trả (paidAmount)!',
+      );
+    }
+
+    // 3. Chặn case gõ nhầm thừa tiền
+    if (paidAmount > total) {
+      throw new BadRequestException(
+        `Số tiền thực trả vượt quá tổng hóa đơn (${total.toLocaleString()}đ)!`,
+      );
+    }
+
+    // 💡 KHÓA MÕM BUG NGẦM: Bắt buộc Status và Số tiền phải nhất quán tuyệt đối
+
+    // Case trả ĐỦ tiền nhưng FE lại gửi status bậy bạ (ví dụ PARTIAL)
+    if (paidAmount === total && dto.status !== InvoiceStatus.PAID) {
+      throw new BadRequestException(
+        `Dữ liệu không nhất quán! Số tiền đã trả đủ (${paidAmount.toLocaleString()}đ), trạng thái gửi lên bắt buộc phải là PAID.`,
+      );
+    }
+
+    // Case trả THIẾU tiền nhưng FE lại gửi status là PAID
+    if (paidAmount < total && dto.status !== InvoiceStatus.PARTIAL) {
+      throw new BadRequestException(
+        `Dữ liệu không nhất quán! Số tiền mới trả được ${paidAmount.toLocaleString()}đ / ${total.toLocaleString()}đ, trạng thái gửi lên bắt buộc phải là PARTIAL.`,
+      );
+    }
+
+    // 4. Nếu vượt qua hết đống lính gác trên -> Dữ liệu sạch 100%, tự tin lưu DB
+    return await this.prisma.invoice.update({
+      where: { id },
+      data: {
+        status: dto.status,
+        paidAmount: paidAmount,
+      },
+    });
   }
 }
