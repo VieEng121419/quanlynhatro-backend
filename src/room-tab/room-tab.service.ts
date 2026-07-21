@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateRoomTabDto } from './dto/create-room-tab.dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, RoomTab } from '@prisma/client';
+import { GetRoomsDto } from './dto/get-room-tab.dto';
+import { paginate, PrismaQueryOptions } from 'src/common/utils/paginate.util';
 
 type InvoiceWithContract = Prisma.InvoiceGetPayload<{
   include: { contract: true };
@@ -81,5 +83,31 @@ export class RoomTabService {
       }
       return newTab;
     });
+  }
+
+  async findAll(query: GetRoomsDto) {
+    const { page, limit, search, status } = query;
+
+    const where: PrismaQueryOptions['where'] = {};
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (search) {
+      where.roomNumber = {
+        contains: search,
+      };
+    }
+
+    return paginate<RoomTab>(
+      this.prisma.roomTab,
+      {
+        where,
+        orderBy: { id: 'asc' },
+        include: {},
+      },
+      { page, limit },
+    );
   }
 }

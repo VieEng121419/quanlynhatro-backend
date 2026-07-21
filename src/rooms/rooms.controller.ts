@@ -34,7 +34,7 @@ export class RoomsController {
     return {
       success: true,
       statusCode: 201,
-      message: 'Room created successfully',
+      message: 'Đã tạo phòng mới thành công!',
       data,
     };
   }

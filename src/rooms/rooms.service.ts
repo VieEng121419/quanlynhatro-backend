@@ -26,7 +26,7 @@ export class RoomsService {
 
     if (status) where.status = status;
     if (search) {
-      where.name = { contains: search, mode: 'insensitive' };
+      where.roomNumber = { contains: search };
     }
 
     return paginate<Room>(
