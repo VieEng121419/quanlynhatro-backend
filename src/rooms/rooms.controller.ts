@@ -7,18 +7,25 @@ import {
   Post,
   Put,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { RoomsService } from './rooms.service';
 import { CreateRoomDto } from './dto/create-room.dto';
 import { GetRoomsQueryDto } from './dto/get-room.dto';
 import { BulkCreateRoomDto } from './dto/bulk-create-room.dto';
 import { UpdateRoomDto } from './dto/update-room.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @Controller('room')
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class RoomsController {
   constructor(private readonly roomsService: RoomsService) {}
 
   @Get()
+  @Roles(Role.ADMIN)
   async getRooms(@Query() query: GetRoomsQueryDto) {
     const data = await this.roomsService.findAll(query);
     return {
@@ -40,6 +47,7 @@ export class RoomsController {
   }
 
   @Post('bulk')
+  @Roles(Role.ADMIN)
   async bulkCreateRooms(@Body() dto: BulkCreateRoomDto) {
     const result = await this.roomsService.bulkCreate(dto);
     return {
@@ -50,6 +58,7 @@ export class RoomsController {
   }
 
   @Put(':id')
+  @Roles(Role.ADMIN)
   async updateRoom(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateRoomDto,

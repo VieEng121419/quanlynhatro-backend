@@ -10,6 +10,7 @@ import { ContractModule } from './contract/contract.module';
 import { InvoiceModule } from './invoice/invoice.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RoomTabModule } from './room-tab/room-tab.module';
+import { AuthModule } from './auth/auth.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { RoomTabModule } from './room-tab/room-tab.module';
     InvoiceModule,
     ScheduleModule.forRoot(),
     RoomTabModule,
+    AuthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

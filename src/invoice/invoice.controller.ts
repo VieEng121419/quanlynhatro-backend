@@ -6,17 +6,24 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  UseGuards,
 } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
 import { ChangeStatusDto } from './dto/change-status.dto';
+import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from 'src/auth/guards/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @Controller('invoice')
+@UseGuards(AuthGuard('jwt'), RolesGuard)
 export class InvoiceController {
   constructor(private readonly invoiceService: InvoiceService) {}
 
   @Patch(':id/counter')
+  @Roles(Role.ADMIN)
   async updateCounter(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateInvoiceDto,
@@ -31,6 +38,7 @@ export class InvoiceController {
   }
 
   @Post(':id/payment')
+  @Roles(Role.ADMIN)
   async processPayment(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ProcessPaymentDto,
@@ -48,6 +56,7 @@ export class InvoiceController {
   }
 
   @Get(':id')
+  @Roles(Role.ADMIN)
   async getInvoiceDetail(@Param('id', ParseIntPipe) id: number) {
     const result = await this.invoiceService.findOne(id);
     return {
@@ -59,6 +68,7 @@ export class InvoiceController {
   }
 
   @Patch(':id/status')
+  @Roles(Role.ADMIN)
   async changeStatus(
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: ChangeStatusDto,

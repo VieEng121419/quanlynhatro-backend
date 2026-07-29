@@ -67,6 +67,9 @@ model Contract {
 
   invoices          Invoice[]
   isActive          Boolean   @default(true)
+
+  userId    Int?
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 // 5. Sổ nợ tiền hàng (Mua nước, đá, tạp hóa lẻ...)
@@ -134,4 +137,28 @@ model Expense {
   description String
   amount      Decimal  @db.Decimal(10, 2)
   expenseDate DateTime @default(now())
+}
+
+enum Role {
+  ADMIN
+  STAFF
+  TENANT
+}
+
+model User {
+  id          Int      @id @default(autoincrement())
+  userName    String   @unique
+  password    String   // Mật khẩu đã hash bằng bcrypt
+  fullName    String   // Họ tên người dùng / Người đại diện
+  phoneNumber String
+  
+  role        Role     @default(ADMIN)
+  isActive    Boolean  @default(true)
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // 💡 Mối quan hệ trực tiếp với Hợp đồng và Hóa đơn (không cần qua trung gian Tenant nữa)
+  contracts   Contract[]
+  // invoices  Invoice[]  // Nếu mày muốn lưu trực tiếp invoice theo User
 }
