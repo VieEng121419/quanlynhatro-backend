@@ -1,0 +1,52 @@
+name: quanlynhatro
+
+services:
+  backend:
+    # Image được build bằng GitHub Actions và push lên GHCR — KHÔNG build tại droplet
+    image: ghcr.io/vieeng121419/quanlynhatro-backend:latest
+    restart: unless-stopped
+    mem_limit: 512m
+    # Đặt env riêng lẻ để runtime (prisma.service) hiểu — dùng giá trị từ file .env trên droplet
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: mysql://${DB_USER}:${DB_PASSWORD}@mysql:3306/${DB_NAME}
+      DATABASE_HOST: mysql
+      DATABASE_PORT: "3306"
+      DATABASE_USER: ${DB_USER}
+      DATABASE_PASSWORD: ${DB_PASSWORD}
+      DATABASE_NAME: ${DB_NAME}
+      NODE_MAX_OLD_SPACE_SIZE: "384"
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # entrypoint giữ image mặc định → tự chờ DB + chạy migrate rồi start
+
+  mysql:
+    image: mariadb:11
+    restart: unless-stopped
+    mem_limit: 384m
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD}
+      MARIADB_DATABASE: ${DB_NAME}
+      MARIADB_USER: ${DB_USER}
+      MARIADB_PASSWORD: ${DB_PASSWORD}
+    # Tinh chỉnh bộ nhớ nhỏ gọn cho droplet 1GB
+    command:
+      - --innodb-buffer-pool-size=96M
+      - --key-buffer-size=8M
+      - --max-connections=50
+      - --performance-schema=OFF
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  mysql_data:

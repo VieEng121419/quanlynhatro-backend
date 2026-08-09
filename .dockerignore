@@ -7,3 +7,8 @@ npm-debug.log*
 coverage
 README.md
 test
+deploy
+.github
+.dockerignore
+Dockerfile
+docker-compose*.yml
