@@ -1,6 +1,6 @@
 import { Controller, Post, Body } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { RegisterDto, LoginDto } from './dto/auth.dto';
+import { RegisterDto, LoginDto, QrLoginDto } from './dto/auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -24,6 +24,17 @@ export class AuthController {
       success: true,
       statusCode: 200,
       message: 'Đăng nhập thành công!',
+      data: result,
+    };
+  }
+
+  @Post('qr-login')
+  async qrLogin(@Body() dto: QrLoginDto) {
+    const result = await this.authService.qrLogin(dto);
+    return {
+      success: true,
+      statusCode: 200,
+      message: 'Đăng nhập bằng mã QR thành công!',
       data: result,
     };
   }

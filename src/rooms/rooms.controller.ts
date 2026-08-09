@@ -17,6 +17,7 @@ import { UpdateRoomDto } from './dto/update-room.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 import { Role } from '@prisma/client';
 
 @Controller('room')
@@ -69,6 +70,30 @@ export class RoomsController {
       statusCode: 200,
       message: `Cập nhật phòng #${id} thành công!`,
       data: result,
+    };
+  }
+
+  @Get('my-room')
+  @Roles(Role.ADMIN, Role.STAFF, Role.TENANT)
+  async getMyRoom(@CurrentUser('id') userId: number) {
+    const room = await this.roomsService.getMyRoom(userId);
+
+    return {
+      success: true,
+      statusCode: 200,
+      data: room,
+    };
+  }
+
+  @Get(':id')
+  @Roles(Role.ADMIN, Role.STAFF, Role.TENANT)
+  async getRoomById(@Param('id', ParseIntPipe) id: number) {
+    const room = await this.roomsService.getRoomById(id);
+
+    return {
+      success: true,
+      statusCode: 200,
+      data: room,
     };
   }
 }

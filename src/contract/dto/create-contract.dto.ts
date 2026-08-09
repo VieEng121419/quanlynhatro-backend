@@ -54,4 +54,8 @@ export class CreateContractDto {
   @IsOptional()
   @IsInt({ message: 'Phí người thêm phải là số nguyên' })
   extraPersonFee?: number;
+
+  @IsOptional()
+  @IsInt({ message: 'userId phải là số nguyên' })
+  userId?: number;
 }

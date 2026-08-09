@@ -55,6 +55,10 @@ export class UpdateContractDto {
   @IsInt()
   basePeopleLimit?: number;
 
+  @IsOptional()
+  @IsInt()
+  userId?: number;
+
   // Thanh lý nên tách riêng, không để ở đây
   // @IsOptional()
   // @IsBoolean()

@@ -28,6 +28,7 @@ export class ContractService {
       activePeopleCount,
       basePeopleLimit,
       extraPersonFee,
+      userId,
     } = createContractDto;
 
     const room = await this.prisma.room.findUnique({
@@ -57,6 +58,7 @@ export class ContractService {
           basePeopleLimit: basePeopleLimit || 2,
           extraPersonFee: extraPersonFee || 0,
           isActive: true,
+          userId,
         },
       });
 
@@ -70,14 +72,18 @@ export class ContractService {
   }
 
   async update(id: number, dto: UpdateContractDto) {
-    // 1. Kiểm tra xem hợp đồng có tồn tại không
-    this.logger.log('dto', dto);
-    const existingContract = await this.prisma.contract.findUnique({
-      where: { id },
+    // 1. Kiểm tra xem hợp đồng có tồn tại và đang hoạt động không (id + isActive: true)
+    const existingContract = await this.prisma.contract.findFirst({
+      where: {
+        id,
+        isActive: true,
+      },
     });
 
     if (!existingContract) {
-      throw new NotFoundException(`Không tìm thấy hợp đồng có ID #${id}`);
+      throw new NotFoundException(
+        `Không tìm thấy hợp đồng đang hoạt động có ID #${id}`,
+      );
     }
 
     try {
@@ -97,6 +103,7 @@ export class ContractService {
             billingCycleDay: dto.billingCycleDay,
             startDate: dto.startDate ? new Date(dto.startDate) : undefined,
             endDate: dto.endDate ? new Date(dto.endDate) : undefined,
+            userId: dto.userId,
             // isActive: dto.isActive,
           },
         });

@@ -42,3 +42,9 @@ export class LoginDto {
   @IsNotEmpty()
   password: string;
 }
+
+export class QrLoginDto {
+  @IsString()
+  @IsNotEmpty()
+  roomCode: string;
+}

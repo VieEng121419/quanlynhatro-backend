@@ -154,4 +154,59 @@ export class RoomsService {
       throw new BadRequestException('Cập nhật thông tin phòng thất bại');
     }
   }
+  async getRoomById(id: number) {
+    const room = await this.prisma.room.findUnique({
+      where: { id },
+      include: {
+        contracts: {
+          where: { isActive: true },
+          include: {
+            invoices: {
+              orderBy: { createdAt: 'desc' },
+              take: 1,
+              select: {
+                id: true,
+                totalAmount: true,
+                oldElectric: true,
+                oldWater: true,
+                newElectric: true,
+                newWater: true,
+                peopleCountSnapshot: true,
+                createdAt: true,
+                status: true,
+                serviceAmount: true,
+                tabAmount: true,
+                debtAmount: true,
+                paidAmount: true,
+                fromDate: true,
+                toDate: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!room) {
+      throw new NotFoundException(`Không tìm thấy phòng với ID: ${id}`);
+    }
+
+    return room;
+  }
+
+  async getMyRoom(userId: number) {
+    // 1. Tìm hợp đồng đang hoạt động của user
+    const contract = await this.prisma.contract.findFirst({
+      where: { userId, isActive: true },
+    });
+
+    if (!contract) {
+      throw new NotFoundException(
+        'Bạn chưa có hợp đồng phòng nào đang hoạt động!',
+      );
+    }
+
+    // 2. Reuse logic getRoomById để trả về room kèm contracts + invoices
+    return this.getRoomById(contract.roomId);
+  }
 }
