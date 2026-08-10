@@ -51,3 +51,29 @@ jobs:
           # DATABASE_URL chỉ dùng để load prisma.config.ts khi generate — không kết nối tới DB
           build-args: |
             DATABASE_URL=mysql://root:root@localhost:3306/quanlynhatro
+
+  # ===== JOB 2: Tự động deploy lên droplet sau khi build xong =====
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    # Chỉ deploy khi push lên main (không deploy khi chạy thủ công workflow_dispatch nếu muốn — có thể bỏ comment)
+    # if: github.event_name == 'push'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to droplet via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          # Đảm bảo file compose mới nhất trên droplet, rồi pull image mới và up
+          script: |
+            cd ~
+            # Copy file compose mới nhất từ repo (nếu có thay đổi)
+            # (đã có sẵn trên droplet từ lần setup — nếu cần cập nhật, bỏ comment dòng dưới)
+            # curl -fsSL https://raw.githubusercontent.com/${{ github.repository }}/main/docker-compose.prod.yml -o docker-compose.prod.yml
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d
+            docker image prune -f || true
