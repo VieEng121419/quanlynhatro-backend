@@ -39,7 +39,7 @@ export class InvoiceService {
     }
 
     const ELECTRIC_PRICE = 3500; // 3.500 đ/kwh
-    const WATER_PRICE = 15000; // 15.000 đ/m3
+    const WATER_PRICE = 17000; // 17.000 đ/m3
 
     const electricUsage = newElectric - invoice.oldElectric;
     const electricCost = electricUsage * ELECTRIC_PRICE;
