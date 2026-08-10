@@ -40,6 +40,10 @@ services:
       - --key-buffer-size=8M
       - --max-connections=50
       - --performance-schema=OFF
+    # Chỉ bind vào localhost (127.0.0.1) — database KHÔNG lộ ra internet.
+    # Muốn truy cập từ Navicat: dùng SSH tunnel qua droplet rồi connect localhost:3306.
+    ports:
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
