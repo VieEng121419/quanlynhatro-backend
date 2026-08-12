@@ -39,7 +39,7 @@ export class InvoiceService {
     }
 
     const ELECTRIC_PRICE = 3500; // 3.500 đ/kwh
-    const WATER_PRICE = 7000; // 17.000 đ/m3
+    const WATER_PRICE = 7000; // 7.000 đ/m3
     const GARBAGE_FEE = 10000; // 10.000 đ tiền rác
 
     const electricUsage = newElectric - invoice.oldElectric;
@@ -47,7 +47,7 @@ export class InvoiceService {
     const waterUsage = newWater - invoice.oldWater;
     const waterCost = waterUsage * WATER_PRICE;
 
-    const serviceAmount = electricCost + waterCost;
+    const serviceAmount = electricCost + waterCost + GARBAGE_FEE;
 
     const rentPrice = Number(invoice.contract.rentPrice);
     const peopleLimit = invoice.contract.basePeopleLimit || 2;
@@ -64,8 +64,7 @@ export class InvoiceService {
     const tabAmount = Number(invoice.tabAmount || 0);
     const debtAmount = Number(invoice.debtAmount || 0);
 
-    const totalAmount =
-      rentAmount + serviceAmount + tabAmount + debtAmount + GARBAGE_FEE;
+    const totalAmount = rentAmount + serviceAmount + tabAmount + debtAmount;
 
     return await this.prisma.invoice.update({
       where: { id },
