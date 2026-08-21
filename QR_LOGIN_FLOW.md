@@ -280,6 +280,50 @@ npm install qrcode
 npm install -D @types/qrcode
 ```
 
+## 8.1. Deploy `QR_SECRET` lên production
+
+### Các file cần sửa trong repo
+
+**`docker-compose.prod.yml`** — thêm `QR_SECRET` vào environment của backend:
+```yaml
+environment:
+  ...
+  JWT_SECRET: ${JWT_SECRET}
+  QR_SECRET: ${QR_SECRET}   # ← thêm dòng này
+```
+
+**`deploy/setup-droplet.sh`** — thêm `QR_SECRET` vào file `.env` mẫu:
+```bash
+# ===== CẤU HÌNH BACKEND =====
+JWT_SECRET=CHANGE_ME_jwt_secret
+QR_SECRET=CHANGE_ME_qr_secret   # ← thêm dòng này
+```
+
+### Thao tác trên droplet (thủ công 1 lần)
+
+```bash
+ssh root@<DROPLET_IP>
+cd ~
+nano .env   # hoặc vi .env
+```
+
+Thêm dòng (generate secret bằng `openssl rand -hex 32`):
+```
+QR_SECRET=<chuỗi ngẫu nhiên 64 ký tự>
+```
+
+Lưu lại, rồi restart container:
+```bash
+docker compose -f docker-compose.prod.yml up -d
+```
+
+> `docker compose up -d` sẽ tự nhận biến mới từ `.env` và recreate container backend. Không cần `down` trước.
+
+### ⚠️ Lưu ý quan trọng
+- `QR_SECRET` phải **GIỐNG nhau** giữa lúc tạo QR và lúc verify QR. Nếu đổi secret sau khi đã in QR, toàn bộ QR cũ sẽ vô hiệu.
+- Generate secret bằng: `openssl rand -hex 32`
+- Không commit `.env` lên git (đã có trong `.gitignore`)
+
 ## 9. Các file liên quan
 
 | File | Vai trò |

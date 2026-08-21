@@ -212,8 +212,8 @@ export class InvoiceService {
     // 1. Kiểm tra xem hợp đồng này có tồn tại và thuộc về User đang request không
     const contract = await this.prisma.contract.findFirst({
       where: {
-        id: contractId,
-        userId: userId, // Chốt chặn bảo mật: Chỉ cho phép xem hóa đơn của chính mình
+        id: Number(contractId),
+        userId: Number(userId), // Chốt chặn bảo mật: Chỉ cho phép xem hóa đơn của chính mình
       },
     });
 
@@ -226,9 +226,9 @@ export class InvoiceService {
     // 2. Query lấy N dòng hóa đơn mới nhất của hợp đồng đó
     const invoices = await this.prisma.invoice.findMany({
       where: {
-        contractId: contractId,
+        contractId: Number(contractId),
       },
-      take: limit,
+      take: Number(limit),
       orderBy: {
         createdAt: 'desc', // Lấy row mới nhất lên đầu
       },

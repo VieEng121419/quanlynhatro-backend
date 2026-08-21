@@ -93,6 +93,8 @@ DB_PASSWORD=CHANGE_ME_app_password
 # ===== CẤU HÌNH BACKEND =====
 # Secret cho JWT (bạn tự generate bằng: openssl rand -hex 32)
 JWT_SECRET=CHANGE_ME_jwt_secret
+# Secret cho QR code (bạn tự generate bằng: openssl rand -hex 32)
+QR_SECRET=CHANGE_ME_qr_secret
 
 # ===== GHI CHÚ =====
 # Sau khi điền, chạy lệnh pull image và up:
