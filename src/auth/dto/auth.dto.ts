@@ -4,6 +4,7 @@ import {
   MinLength,
   IsEnum,
   IsOptional,
+  IsInt,
 } from 'class-validator';
 import { Role } from '@prisma/client';
 
@@ -46,5 +47,15 @@ export class LoginDto {
 export class QrLoginDto {
   @IsString()
   @IsNotEmpty()
-  roomCode: string;
+  qrCode: string;
+}
+
+export class GenerateQrDto {
+  @IsInt()
+  @IsNotEmpty()
+  roomId: number;
+
+  @IsInt()
+  @IsNotEmpty()
+  userId: number;
 }

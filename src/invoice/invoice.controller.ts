@@ -6,6 +6,7 @@ import {
   ParseIntPipe,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { InvoiceService } from './invoice.service';
@@ -16,6 +17,8 @@ import { AuthGuard } from '@nestjs/passport';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { Roles } from 'src/auth/decorators/roles.decorator';
 import { Role } from '@prisma/client';
+import { GetInvoicesDto } from './dto/get-invoices.dto';
+import { CurrentUser } from 'src/auth/decorators/current-user.decorator';
 
 @Controller('invoice')
 @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -52,6 +55,21 @@ export class InvoiceController {
           ? 'Hoá đơn đã đã được thanh toán hoàn tất'
           : 'Hoá đơn đã được thành toán một phần, còn lại sẽ được ghi nợ',
       data,
+    };
+  }
+
+  @Get('tenant')
+  @Roles(Role.ADMIN, Role.TENANT, Role.STAFF) // Cho phép cả Tenant và Admin test
+  async getTenantInvoices(
+    @Query() query: GetInvoicesDto,
+    @CurrentUser('id') userId: number, // Bốc ID từ Token
+  ) {
+    const invoices = await this.invoiceService.getTenantInvoices(query, userId);
+
+    return {
+      success: true,
+      statusCode: 200,
+      data: invoices,
     };
   }
 

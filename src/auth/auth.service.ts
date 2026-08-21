@@ -5,8 +5,15 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service'; // Adjust path theo dự án của bạn
-import { RegisterDto, LoginDto, QrLoginDto } from './dto/auth.dto';
+import {
+  RegisterDto,
+  LoginDto,
+  QrLoginDto,
+  GenerateQrDto,
+} from './dto/auth.dto';
 import * as bcrypt from 'bcrypt';
+import * as QRCode from 'qrcode';
+import { generateQrCode, verifyQrCode } from '../common/utils/qr.util';
 
 @Injectable()
 export class AuthService {
@@ -44,19 +51,18 @@ export class AuthService {
   }
 
   async qrLogin(dto: QrLoginDto) {
-    // 1. Tìm phòng theo roomNumber
-    const room = await this.prisma.room.findFirst({
-      where: { roomNumber: dto.roomCode },
-    });
-    if (!room) {
+    // 1. Verify mã QR (HMAC)
+    const decoded = verifyQrCode(dto.qrCode);
+    if (!decoded) {
       throw new UnauthorizedException('Mã QR không hợp lệ!');
     }
+    const { roomId, userId } = decoded;
 
-    // 2. Tìm hợp đồng đang hoạt động của phòng, có liên kết user
+    // 2. Tìm hợp đồng đang hoạt động giữa phòng và user
     const contract = await this.prisma.contract.findFirst({
-      where: { roomId: room.id, isActive: true, userId: { not: null } },
+      where: { roomId, userId, isActive: true },
     });
-    if (!contract || !contract.userId) {
+    if (!contract) {
       throw new UnauthorizedException(
         'Phòng này chưa có tài khoản người thuê!',
       );
@@ -64,7 +70,7 @@ export class AuthService {
 
     // 3. Lấy user
     const user = await this.prisma.user.findUnique({
-      where: { id: contract.userId },
+      where: { id: userId },
     });
     if (!user || !user.isActive) {
       throw new UnauthorizedException(
@@ -83,6 +89,56 @@ export class AuthService {
         userName: user.userName,
         fullName: user.fullName,
         role: user.role,
+      },
+    };
+  }
+
+  async generateQr(dto: GenerateQrDto) {
+    const { roomId, userId } = dto;
+
+    // 1. Kiểm tra phòng tồn tại
+    const room = await this.prisma.room.findUnique({
+      where: { id: roomId },
+    });
+    if (!room) {
+      throw new BadRequestException('Phòng không tồn tại!');
+    }
+
+    // 2. Kiểm tra user tồn tại
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new BadRequestException('Người dùng không tồn tại!');
+    }
+
+    // 3. Kiểm tra hợp đồng active giữa phòng và user
+    const contract = await this.prisma.contract.findFirst({
+      where: { roomId, userId, isActive: true },
+    });
+    if (!contract) {
+      throw new BadRequestException(
+        'Không có hợp đồng đang hoạt động giữa phòng và người dùng này!',
+      );
+    }
+
+    // 4. Tạo chuỗi QR code (HMAC)
+    const qrCode = generateQrCode(roomId, userId);
+
+    // 5. Tạo hình QR (PNG data URL)
+    const qrImage = await QRCode.toDataURL(qrCode);
+
+    return {
+      qrCode,
+      qrImage,
+      room: {
+        id: room.id,
+        roomNumber: room.roomNumber,
+      },
+      user: {
+        id: user.id,
+        userName: user.userName,
+        fullName: user.fullName,
       },
     };
   }

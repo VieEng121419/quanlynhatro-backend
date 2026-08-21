@@ -7,6 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
 import { ChangeStatusDto, InvoiceStatus } from './dto/change-status.dto';
+import { GetInvoicesDto } from './dto/get-invoices.dto';
 
 @Injectable()
 export class InvoiceService {
@@ -203,5 +204,45 @@ export class InvoiceService {
         paidAmount: paidAmount,
       },
     });
+  }
+
+  async getTenantInvoices(query: GetInvoicesDto, userId: number) {
+    const { contractId, limit = 10 } = query;
+
+    // 1. Kiểm tra xem hợp đồng này có tồn tại và thuộc về User đang request không
+    const contract = await this.prisma.contract.findFirst({
+      where: {
+        id: contractId,
+        userId: userId, // Chốt chặn bảo mật: Chỉ cho phép xem hóa đơn của chính mình
+      },
+    });
+
+    if (!contract) {
+      throw new NotFoundException(
+        'Không tìm thấy hợp đồng hoặc bạn không có quyền truy cập.',
+      );
+    }
+
+    // 2. Query lấy N dòng hóa đơn mới nhất của hợp đồng đó
+    const invoices = await this.prisma.invoice.findMany({
+      where: {
+        contractId: contractId,
+      },
+      take: limit,
+      orderBy: {
+        createdAt: 'desc', // Lấy row mới nhất lên đầu
+      },
+      include: {
+        contract: {
+          select: {
+            room: {
+              select: { roomNumber: true },
+            },
+          },
+        },
+      },
+    });
+
+    return invoices;
   }
 }
