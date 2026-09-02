@@ -11,6 +11,7 @@ import { InvoiceModule } from './invoice/invoice.module';
 import { ScheduleModule } from '@nestjs/schedule';
 import { RoomTabModule } from './room-tab/room-tab.module';
 import { AuthModule } from './auth/auth.module';
+import { NotificationModule } from './notification/notification.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { AuthModule } from './auth/auth.module';
     ScheduleModule.forRoot(),
     RoomTabModule,
     AuthModule,
+    NotificationModule,
   ],
   controllers: [AppController],
   providers: [AppService],

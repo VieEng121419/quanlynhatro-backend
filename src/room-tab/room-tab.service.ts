@@ -1,17 +1,17 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { NotificationService } from '../notification/notification.service';
 import { CreateRoomTabDto } from './dto/create-room-tab.dto';
-import { Prisma, RoomTab } from '@prisma/client';
+import { RoomTab } from '@prisma/client';
 import { GetRoomsDto } from './dto/get-room-tab.dto';
 import { paginate, PrismaQueryOptions } from 'src/common/utils/paginate.util';
 
-type InvoiceWithContract = Prisma.InvoiceGetPayload<{
-  include: { contract: true };
-}>;
-
 @Injectable()
 export class RoomTabService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async create(dto: CreateRoomTabDto) {
     const { roomId, description, amount } = dto;
@@ -25,29 +25,29 @@ export class RoomTabService {
       );
     }
 
-    const activeContract = await this.prisma.contract.findFirst({
-      where: { roomId: roomId, isActive: true },
-    });
+    let notification: {
+      userId: number;
+      title: string;
+      message: string;
+      referenceId: number | null;
+    } | null = null;
 
-    let targetInvoiceId: number | null = null;
-    let currentInvoice: InvoiceWithContract | null = null;
-
-    if (activeContract) {
-      currentInvoice = await this.prisma.invoice.findFirst({
-        where: {
-          contractId: activeContract.id,
-          status: { in: ['DRAFT', 'UNPAID'] },
-        },
-        include: { contract: true },
+    const result = await this.prisma.$transaction(async (tx) => {
+      const activeContract = await tx.contract.findFirst({
+        where: { roomId, isActive: true },
       });
-      if (currentInvoice) {
-        targetInvoiceId = currentInvoice.id;
-      }
-    }
+      const currentInvoice = activeContract
+        ? await tx.invoice.findFirst({
+            where: {
+              contractId: activeContract.id,
+              status: { in: ['DRAFT', 'UNPAID'] },
+            },
+            include: { contract: true },
+          })
+        : null;
+      const targetInvoiceId = currentInvoice?.id ?? null;
+      const tabStatus = targetInvoiceId ? 'INVOICED' : 'PENDING';
 
-    const tabStatus = targetInvoiceId ? 'INVOICED' : 'PENDING';
-
-    return await this.prisma.$transaction(async (tx) => {
       const newTab = await tx.roomTab.create({
         data: {
           roomId,
@@ -58,7 +58,7 @@ export class RoomTabService {
         },
       });
 
-      if (targetInvoiceId && currentInvoice) {
+      if (currentInvoice && targetInvoiceId) {
         const updatedTabAmount = Number(currentInvoice.tabAmount) + amount;
 
         if (currentInvoice.status === 'DRAFT') {
@@ -68,7 +68,6 @@ export class RoomTabService {
               tabAmount: updatedTabAmount,
             },
           });
-          return newTab;
         } else if (currentInvoice.status === 'UNPAID') {
           const updatedTotalAmount =
             Number(currentInvoice.totalAmount) + amount;
@@ -81,8 +80,27 @@ export class RoomTabService {
           });
         }
       }
+      if (activeContract?.userId) {
+        notification = {
+          userId: activeContract.userId,
+          title: 'Khoản phát sinh mới',
+          message: `${description} giá ${amount.toLocaleString('vi-VN')} VNĐ`,
+          referenceId: targetInvoiceId,
+        };
+        await this.notifications.createForEvent(tx, {
+          userId: notification.userId,
+          title: notification.title,
+          message: notification.message,
+          referenceId: targetInvoiceId ?? undefined,
+          type: 'ROOM_TAB_CREATED',
+          eventKey: `room-tab:${newTab.id}:created`,
+        });
+      }
       return newTab;
     });
+    if (notification)
+      void this.notifications.dispatch(notification).catch(() => undefined);
+    return result;
   }
 
   async findAll(query: GetRoomsDto) {

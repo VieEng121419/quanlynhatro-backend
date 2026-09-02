@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-// import { Cron } from '@nestjs/schedule';
 import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
@@ -12,129 +11,84 @@ export class InvoiceCronService {
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   // @Cron('*/10 * * * * *')
   async handleMonthlyInvoiceGeneration() {
-    this.logger.log('Generating monthly invoices...');
-    // Logic to generate monthly invoices
-
     const today = new Date();
-    const currentDay = today.getDate();
-
     const activeContracts = await this.prisma.contract.findMany({
-      where: {
-        isActive: true,
-        billingCycleDay: currentDay,
-      },
+      where: { isActive: true, billingCycleDay: today.getDate() },
     });
-
-    this.logger.log(
-      `Found ${activeContracts.length} active contracts for invoice generation.`,
-    );
-
     for (const contract of activeContracts) {
       try {
-        //Check duplicate invoice
-        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-        const endOfMonth = new Date(
-          today.getFullYear(),
-          today.getMonth() + 1,
-          0,
-          23,
-          59,
-          59,
-        );
-
-        const existingInvoice = await this.prisma.invoice.findFirst({
-          where: {
-            contractId: contract.id,
-            createdAt: {
-              gte: startOfMonth,
-              lte: endOfMonth,
-            },
-          },
-        });
-
-        if (existingInvoice) {
-          this.logger.warn(
-            `Invoice already exists for contract ${contract.id} for the current month. Skipping...`,
+        await this.prisma.$transaction(async (tx) => {
+          const startOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth(),
+            1,
           );
-          continue;
-        }
-
-        const lastInvoice = await this.prisma.invoice.findFirst({
-          where: { contractId: contract.id },
-          orderBy: { createdAt: 'desc' },
-        });
-
-        let debtAmount = 0;
-        let oldElectric = 0;
-        let oldWater = 0;
-
-        if (lastInvoice) {
-          oldElectric = lastInvoice.newElectric;
-          oldWater = lastInvoice.newWater;
-
-          if (lastInvoice.status !== 'PAID') {
-            const total = Number(lastInvoice.totalAmount || 0);
-            const paid = Number(lastInvoice.paidAmount || 0);
-            if (total > paid) {
-              debtAmount = total - paid;
-            }
-          }
-        }
-
-        const pendingTabs = await this.prisma.roomTab.findMany({
-          where: {
-            invoiceId: null,
-            roomId: contract.roomId,
-          },
-        });
-
-        let totalPendingTabAmount = 0;
-        if (pendingTabs.length > 0) {
-          totalPendingTabAmount = pendingTabs.reduce(
+          const endOfMonth = new Date(
+            today.getFullYear(),
+            today.getMonth() + 1,
+            0,
+            23,
+            59,
+            59,
+          );
+          const existing = await tx.invoice.findFirst({
+            where: {
+              contractId: contract.id,
+              createdAt: { gte: startOfMonth, lte: endOfMonth },
+            },
+          });
+          if (existing) return;
+          const lastInvoice = await tx.invoice.findFirst({
+            where: { contractId: contract.id },
+            orderBy: { createdAt: 'desc' },
+          });
+          const debtAmount =
+            lastInvoice && lastInvoice.status !== 'PAID'
+              ? Math.max(
+                  0,
+                  Number(lastInvoice.totalAmount) -
+                    Number(lastInvoice.paidAmount),
+                )
+              : 0;
+          const pendingTabs = await tx.roomTab.findMany({
+            where: { invoiceId: null, roomId: contract.roomId },
+          });
+          const tabAmount = pendingTabs.reduce(
             (sum, tab) => sum + Number(tab.amount),
             0,
           );
-        }
-
-        const fromDate = lastInvoice ? lastInvoice.toDate : contract.startDate;
-        const toDate = today;
-
-        const newInvoice = await this.prisma.invoice.create({
-          data: {
-            contractId: contract.id,
-            fromDate,
-            toDate,
-            oldElectric,
-            newElectric: oldElectric,
-            oldWater,
-            newWater: oldWater,
-            debtAmount,
-            peopleCountSnapshot: contract.activePeopleCount || 2,
-            rentAmount: contract?.rentPrice || 0,
-            serviceAmount: 0,
-            tabAmount: totalPendingTabAmount,
-            totalAmount: debtAmount,
-            status: 'DRAFT',
-          },
-        });
-
-        if (pendingTabs.length > 0) {
-          await this.prisma.roomTab.updateMany({
-            where: {
-              id: { in: pendingTabs.map((tab) => tab.id) },
-            },
+          const invoice = await tx.invoice.create({
             data: {
-              invoiceId: newInvoice.id,
+              contractId: contract.id,
+              fromDate: lastInvoice?.toDate ?? contract.startDate,
+              toDate: today,
+              oldElectric: lastInvoice?.newElectric ?? 0,
+              newElectric: lastInvoice?.newElectric ?? 0,
+              oldWater: lastInvoice?.newWater ?? 0,
+              newWater: lastInvoice?.newWater ?? 0,
+              debtAmount,
+              peopleCountSnapshot: contract.activePeopleCount || 2,
+              rentAmount: contract.rentPrice,
+              serviceAmount: 0,
+              tabAmount,
+              totalAmount: debtAmount + tabAmount,
+              status: 'DRAFT',
             },
           });
-        }
-        this.logger.log(`Invoice created for contract ${contract.id}`);
+          if (pendingTabs.length)
+            await tx.roomTab.updateMany({
+              where: {
+                id: { in: pendingTabs.map((tab) => tab.id) },
+                invoiceId: null,
+              },
+              data: { invoiceId: invoice.id },
+            });
+        });
       } catch (error) {
         this.logger.error(
           `Error creating invoice for contract ${contract.id}: ${error}`,
         );
       }
-      this.logger.log(`Finished processing contract ${contract.id}`);
     }
   }
 }

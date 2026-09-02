@@ -43,11 +43,7 @@ export class RolesGuard implements CanActivate {
     }
 
     const hasRole = requiredRoles.includes(user.role);
-    Logger.log(
-      `User ${user.userName} with role ${user.role} is trying to access a route that requires roles: ${requiredRoles.join(
-        ', ',
-      )}. Access granted: ${hasRole}`,
-    );
+
     if (!hasRole) {
       throw new ForbiddenException(
         'Bạn không có quyền thực hiện thao tác này!',

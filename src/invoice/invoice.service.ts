@@ -8,112 +8,150 @@ import { UpdateInvoiceDto } from './dto/update-invoice.dto';
 import { ProcessPaymentDto } from './dto/process-payment.dto';
 import { ChangeStatusDto, InvoiceStatus } from './dto/change-status.dto';
 import { GetInvoicesDto } from './dto/get-invoices.dto';
+import { NotificationService } from 'src/notification/notification.service';
 
 @Injectable()
 export class InvoiceService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly notifications: NotificationService,
+  ) {}
 
   async updateCounters(id: number, dto: UpdateInvoiceDto) {
     const { newElectric, newWater } = dto;
 
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id },
-      include: {
-        contract: true,
-      },
+    let notification: {
+      userId: number;
+      title: string;
+      message: string;
+      referenceId: number;
+    } | null = null;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({
+        where: { id },
+        include: {
+          contract: {
+            select: {
+              userId: true,
+              rentPrice: true,
+              basePeopleLimit: true,
+              extraPersonFee: true,
+            },
+          },
+        },
+      });
+      if (!invoice)
+        throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${id}`);
+      if (newElectric < invoice.oldElectric || newWater < invoice.oldWater)
+        throw new BadRequestException(
+          'Chỉ số mới không được nhỏ hơn chỉ số cũ',
+        );
+      const serviceAmount =
+        (newElectric - invoice.oldElectric) * 3500 +
+        (newWater - invoice.oldWater) * 7000 +
+        10000;
+      const rentAmount =
+        Number(invoice.contract.rentPrice) +
+        Math.max(
+          0,
+          (invoice.peopleCountSnapshot || 1) -
+            (invoice.contract.basePeopleLimit || 2),
+        ) *
+          Number(invoice.contract.extraPersonFee || 0);
+      const totalAmount =
+        rentAmount +
+        serviceAmount +
+        Number(invoice.tabAmount || 0) +
+        Number(invoice.debtAmount || 0);
+      const claimed = await tx.invoice.updateMany({
+        where: { id, status: 'DRAFT' },
+        data: {
+          newElectric,
+          newWater,
+          rentAmount,
+          serviceAmount,
+          totalAmount,
+          status: 'UNPAID',
+        },
+      });
+      if (claimed.count === 0)
+        return tx.invoice.findUniqueOrThrow({ where: { id } });
+      if (invoice.contract.userId) {
+        notification = {
+          userId: invoice.contract.userId,
+          title: 'Hóa đơn mới',
+          message: `Đã có hoá đơn cho tháng ${invoice.toDate.toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}`,
+          referenceId: id,
+        };
+        await this.notifications.createForEvent(tx, {
+          ...notification,
+          type: 'INVOICE_UNPAID',
+          eventKey: `invoice:${id}:status:UNPAID`,
+        });
+      }
+      return tx.invoice.findUniqueOrThrow({ where: { id } });
     });
-
-    if (!invoice) {
-      throw new Error(`Không tìm thấy hóa đơn với ID ${id}`);
-    }
-
-    if (newElectric < invoice.oldElectric) {
-      throw new Error(
-        `Chỉ số điện mới phải lớn hơn hoặc bằng chỉ số cũ (${invoice.oldElectric})`,
-      );
-    }
-
-    if (newWater < invoice.oldWater) {
-      throw new Error(
-        `Chỉ số nước mới phải lớn hơn hoặc bằng chỉ số cũ (${invoice.oldWater})`,
-      );
-    }
-
-    const ELECTRIC_PRICE = 3500; // 3.500 đ/kwh
-    const WATER_PRICE = 7000; // 7.000 đ/m3
-    const GARBAGE_FEE = 10000; // 10.000 đ tiền rác
-
-    const electricUsage = newElectric - invoice.oldElectric;
-    const electricCost = electricUsage * ELECTRIC_PRICE;
-    const waterUsage = newWater - invoice.oldWater;
-    const waterCost = waterUsage * WATER_PRICE;
-
-    const serviceAmount = electricCost + waterCost + GARBAGE_FEE;
-
-    const rentPrice = Number(invoice.contract.rentPrice);
-    const peopleLimit = invoice.contract.basePeopleLimit || 2;
-    const extraPersonFee = Number(invoice.contract.extraPersonFee || 0);
-    const currentPeopleCount = invoice.peopleCountSnapshot || 1;
-
-    let rentAmount = rentPrice;
-
-    if (currentPeopleCount > peopleLimit) {
-      const extraPeopleCount = currentPeopleCount - peopleLimit;
-      rentAmount += extraPeopleCount * extraPersonFee;
-    }
-
-    const tabAmount = Number(invoice.tabAmount || 0);
-    const debtAmount = Number(invoice.debtAmount || 0);
-
-    const totalAmount = rentAmount + serviceAmount + tabAmount + debtAmount;
-
-    return await this.prisma.invoice.update({
-      where: { id },
-      data: {
-        newElectric,
-        newWater,
-        rentAmount,
-        serviceAmount,
-        totalAmount,
-        status: 'UNPAID',
-      },
-    });
+    if (notification)
+      void this.notifications.dispatch(notification).catch(() => undefined);
+    return result;
   }
 
   async processPayment(id: number, dto: ProcessPaymentDto) {
     const { paidAmount } = dto;
 
-    const invoice = await this.prisma.invoice.findUnique({
-      where: { id },
+    let notification: {
+      userId: number;
+      title: string;
+      message: string;
+      referenceId: number;
+    } | null = null;
+    const result = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({
+        where: { id },
+        include: { contract: { select: { userId: true } } },
+      });
+      if (!invoice)
+        throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${id}`);
+      if (invoice.status === 'DRAFT')
+        throw new BadRequestException('Hóa đơn nháp chưa thể thanh toán');
+      const currentPaid = Number(invoice.paidAmount || 0);
+      const totalAmount = Number(invoice.totalAmount);
+      const newTotalPaid = currentPaid + paidAmount;
+      if (newTotalPaid > totalAmount)
+        throw new BadRequestException(
+          'Số tiền thanh toán vượt quá tổng hóa đơn',
+        );
+      const newStatus = newTotalPaid >= totalAmount ? 'PAID' : 'PARTIAL';
+      const claimed = await tx.invoice.updateMany({
+        where: { id, status: invoice.status, paidAmount: invoice.paidAmount },
+        data: { paidAmount: newTotalPaid, status: newStatus },
+      });
+      if (claimed.count === 0)
+        throw new BadRequestException(
+          'Hóa đơn vừa được cập nhật, vui lòng thử lại',
+        );
+      if (
+        invoice.status === 'UNPAID' &&
+        newStatus === 'PAID' &&
+        invoice.contract.userId
+      ) {
+        notification = {
+          userId: invoice.contract.userId,
+          title: 'Thanh toán thành công',
+          message: `Đã thanh toán tiền phòng tháng ${invoice.toDate.toLocaleDateString('vi-VN', { month: '2-digit', year: 'numeric' })}`,
+          referenceId: id,
+        };
+        await this.notifications.createForEvent(tx, {
+          ...notification,
+          type: 'INVOICE_PAID',
+          eventKey: `invoice:${id}:status:PAID`,
+        });
+      }
+      return tx.invoice.findUniqueOrThrow({ where: { id } });
     });
-
-    if (!invoice) {
-      throw new NotFoundException(`Không tìm thấy hóa đơn với ID ${id}`);
-    }
-
-    if (invoice.status === 'DRAFT') {
-      throw new NotFoundException(
-        `Hóa đơn này đang ở dạng nháp (chưa chốt số điện nước), không thể tiến hành thanh toán.`,
-      );
-    }
-
-    const currentPaid = Number(invoice.paidAmount || 0);
-    const newTotalPaid = currentPaid + paidAmount;
-    const totalAmount = Number(invoice.totalAmount);
-
-    let newStatus: 'PAID' | 'PARTIAL' = 'PARTIAL';
-
-    if (newTotalPaid >= totalAmount) {
-      newStatus = 'PAID';
-    }
-
-    return await this.prisma.invoice.update({
-      where: { id },
-      data: {
-        paidAmount: newTotalPaid,
-        status: newStatus,
-      },
-    });
+    if (notification)
+      void this.notifications.dispatch(notification).catch(() => undefined);
+    return result;
   }
 
   async findOne(id: number) {
