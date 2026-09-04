@@ -95,6 +95,7 @@ DB_PASSWORD=CHANGE_ME_app_password
 JWT_SECRET=CHANGE_ME_jwt_secret
 # Secret cho QR code (bạn tự generate bằng: openssl rand -hex 32)
 QR_SECRET=CHANGE_ME_qr_secret
+#VAPID keys cho Web Push Notifications (bạn tự generate bằng: npx web-push generate-vapid-keys)
 VAPID_PUBLIC_KEY=
 VAPID_PRIVATE_KEY=
 VAPID_SUBJECT=mailto:dev@localhost
