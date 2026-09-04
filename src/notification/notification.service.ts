@@ -115,6 +115,9 @@ export class NotificationService {
     const subscriptions = await this.prisma.pushSubscription.findMany({
       where: { userId },
     });
+    this.logger.log(
+      `-----Sending Web Push to ${subscriptions.length} subscriptions`,
+    );
     await Promise.all(
       subscriptions.map(async (subscription) => {
         try {
@@ -131,6 +134,7 @@ export class NotificationService {
                 : '/home',
             }),
           );
+          this.logger.log('-----Web Push delivery successful');
         } catch (error: unknown) {
           if (
             (error as { statusCode?: number }).statusCode === 404 ||
