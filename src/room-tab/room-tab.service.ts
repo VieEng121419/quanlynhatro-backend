@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationService } from '../notification/notification.service';
 import { CreateRoomTabDto } from './dto/create-room-tab.dto';
@@ -8,6 +8,8 @@ import { paginate, PrismaQueryOptions } from 'src/common/utils/paginate.util';
 
 @Injectable()
 export class RoomTabService {
+  private readonly logger = new Logger(RoomTabService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly notifications: NotificationService,
@@ -98,8 +100,11 @@ export class RoomTabService {
       }
       return newTab;
     });
-    if (notification)
+    this.logger.log('-----Notification:', notification);
+    if (notification) {
       void this.notifications.dispatch(notification).catch(() => undefined);
+      this.logger.log('-----Notification dispatched');
+    }
     return result;
   }
 
