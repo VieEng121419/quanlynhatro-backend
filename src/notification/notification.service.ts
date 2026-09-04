@@ -106,6 +106,7 @@ export class NotificationService {
       referenceId: number | null;
     },
   ) {
+    this.logger.log('VAPID _SUBJECT: ' + process.env.VAPID_SUBJECT);
     if (
       !process.env.VAPID_PUBLIC_KEY ||
       !process.env.VAPID_PRIVATE_KEY ||
