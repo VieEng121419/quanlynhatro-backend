@@ -116,9 +116,6 @@ export class NotificationService {
     const subscriptions = await this.prisma.pushSubscription.findMany({
       where: { userId },
     });
-    this.logger.log(
-      `-----Sending Web Push to ${subscriptions.length} subscriptions`,
-    );
     await Promise.all(
       subscriptions.map(async (subscription) => {
         try {

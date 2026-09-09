@@ -49,7 +49,7 @@ describe('InvoiceService notification regressions', () => {
     expect(notifications.createForEvent).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
-        type: 'INVOICE_UNPAID',
+        type: 'rent',
         eventKey: 'invoice:12:status:UNPAID',
         userId: 7,
       }),
@@ -81,7 +81,7 @@ describe('InvoiceService notification regressions', () => {
     expect(notifications.createForEvent).toHaveBeenCalledWith(
       tx,
       expect.objectContaining({
-        type: 'INVOICE_PAID',
+        type: 'trans_successful',
         eventKey: 'invoice:12:status:PAID',
       }),
     );

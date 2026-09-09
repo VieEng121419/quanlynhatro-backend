@@ -85,7 +85,7 @@ export class InvoiceService {
         };
         await this.notifications.createForEvent(tx, {
           ...notification,
-          type: 'INVOICE_UNPAID',
+          type: 'rent',
           eventKey: `invoice:${id}:status:UNPAID`,
         });
       }
@@ -143,7 +143,7 @@ export class InvoiceService {
         };
         await this.notifications.createForEvent(tx, {
           ...notification,
-          type: 'INVOICE_PAID',
+          type: 'trans_successful',
           eventKey: `invoice:${id}:status:PAID`,
         });
       }

@@ -94,13 +94,12 @@ export class RoomTabService {
           title: notification.title,
           message: notification.message,
           referenceId: targetInvoiceId ?? undefined,
-          type: 'ROOM_TAB_CREATED',
+          type: 'utility',
           eventKey: `room-tab:${newTab.id}:created`,
         });
       }
       return newTab;
     });
-    this.logger.log('-----Notification:', notification);
     if (notification) {
       void this.notifications.dispatch(notification).catch(() => undefined);
       this.logger.log('-----Notification dispatched');
