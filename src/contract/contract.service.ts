@@ -31,6 +31,17 @@ export class ContractService {
       userId,
     } = createContractDto;
 
+    if (userId !== undefined) {
+      const tenant = await this.prisma.user.findFirst({
+        where: { id: userId, role: 'TENANT', isActive: true },
+      });
+      if (!tenant) {
+        throw new BadRequestException(
+          'userId phải là tài khoản TENANT đang hoạt động',
+        );
+      }
+    }
+
     const room = await this.prisma.room.findUnique({
       where: { id: roomId },
     });
@@ -44,6 +55,13 @@ export class ContractService {
     }
 
     return await this.prisma.$transaction(async (prisma) => {
+      const activeContract = await prisma.contract.findFirst({
+        where: { roomId, isActive: true },
+      });
+      if (activeContract) {
+        throw new BadRequestException('Phòng đã có hợp đồng đang hoạt động');
+      }
+
       const contract = await prisma.contract.create({
         data: {
           roomId,
@@ -86,9 +104,31 @@ export class ContractService {
       );
     }
 
+    if (dto.userId !== undefined) {
+      const tenant = await this.prisma.user.findFirst({
+        where: { id: dto.userId, role: 'TENANT', isActive: true },
+      });
+      if (!tenant) {
+        throw new BadRequestException(
+          'userId phải là tài khoản TENANT đang hoạt động',
+        );
+      }
+    }
+
     try {
       // 2. Chạy Transaction để đảm bảo tính toàn vẹn dữ liệu giữa Contract và Room
       return await this.prisma.$transaction(async (tx) => {
+        const activeContract = await tx.contract.findFirst({
+          where: {
+            roomId: existingContract.roomId,
+            isActive: true,
+            id: { not: id },
+          },
+        });
+        if (activeContract) {
+          throw new BadRequestException('Phòng đã có hợp đồng đang hoạt động');
+        }
+
         // Cập nhật thông tin hợp đồng
         const updatedContract = await tx.contract.update({
           where: { id },

@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Get, Body, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import {
@@ -14,6 +14,17 @@ import { Role } from '@prisma/client';
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
+
+  @Get('tenants')
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles(Role.ADMIN, Role.STAFF)
+  async listActiveTenants() {
+    return {
+      success: true,
+      statusCode: 200,
+      data: await this.authService.listActiveTenants(),
+    };
+  }
 
   @Post('register')
   async register(@Body() dto: RegisterDto) {

@@ -47,6 +47,32 @@ describe('NotificationService', () => {
     );
   });
 
+  it.each([0, -1, Number.NaN, '10'])(
+    'sanitizes invalid list pagination value %p',
+    async (limit) => {
+      prisma.notification.findMany.mockResolvedValue([]);
+      prisma.notification.count.mockResolvedValue(0);
+      const service = new NotificationService(prisma);
+      await service.list(7, limit as any, -1);
+      expect(prisma.notification.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ take: 20, where: { userId: 7 } }),
+      );
+    },
+  );
+
+  it.each([0, -1, Number.NaN, '10'])(
+    'sanitizes invalid history pagination value %p',
+    async (value) => {
+      prisma.notification.findMany.mockResolvedValue([]);
+      prisma.notification.count.mockResolvedValue(0);
+      const service = new NotificationService(prisma);
+      await service.history(value as any, value as any);
+      expect(prisma.notification.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({ skip: 0, take: 20 }),
+      );
+    },
+  );
+
   it('scopes notification reads and mutations to the authenticated tenant', async () => {
     prisma.notification.findMany.mockResolvedValue([]);
     prisma.notification.count.mockResolvedValue(0);

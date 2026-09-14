@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import webpush from 'web-push';
@@ -49,11 +50,51 @@ export class NotificationService {
     await this.sendPush(notification.userId, notification);
   }
 
+  async createGeneral(title: string, message: string) {
+    const contracts = await this.prisma.contract.findMany({
+      where: {
+        isActive: true,
+        userId: { not: null },
+        room: { status: { not: 'EMPTY' } },
+      },
+      select: { userId: true },
+    });
+    const userIds = [
+      ...new Set(
+        contracts
+          .map((contract) => contract.userId)
+          .filter((id): id is number => id !== null),
+      ),
+    ];
+    const created = await Promise.all(
+      userIds.map((userId) =>
+        this.prisma.notification.create({
+          data: {
+            userId,
+            title,
+            message,
+            type: 'general',
+            eventKey: `general:${createHash('sha256').update(`${userId}:${title}:${message}`).digest('hex')}`,
+          },
+        }),
+      ),
+    );
+    for (const notification of created) {
+      void this.dispatch(notification).catch(() => undefined);
+    }
+    return { created: created.length };
+  }
+
   async list(userId: number, limit = 20, cursor?: number) {
+    const safeLimit = this.positiveInteger(limit, 20);
+    const safeCursor = this.positiveInteger(cursor, 0);
     const where = { userId };
     const notifications = await this.prisma.notification.findMany({
-      where: { ...where, ...(cursor ? { id: { lt: cursor } } : {}) },
-      take: Math.min(limit, 50),
+      where: {
+        ...where,
+        ...(safeCursor ? { id: { lt: safeCursor } } : {}),
+      },
+      take: Math.min(safeLimit, 50),
       orderBy: { id: 'desc' },
     });
     const unreadCount = await this.prisma.notification.count({
@@ -64,6 +105,48 @@ export class NotificationService {
       unreadCount,
       nextCursor: notifications.at(-1)?.id ?? null,
     };
+  }
+
+  async history(page = 1, limit = 20, fromDate?: string, toDate?: string) {
+    const safePage = this.positiveInteger(page, 1);
+    const safeLimit = this.positiveInteger(limit, 20);
+    const where = {
+      ...(fromDate || toDate
+        ? {
+            createdAt: {
+              ...(fromDate ? { gte: new Date(fromDate) } : {}),
+              ...(toDate ? { lte: new Date(toDate) } : {}),
+            },
+          }
+        : {}),
+    };
+    const [items, total] = await Promise.all([
+      this.prisma.notification.findMany({
+        where,
+        include: {
+          user: { select: { id: true, fullName: true, phoneNumber: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        skip: (safePage - 1) * safeLimit,
+        take: Math.min(safeLimit, 100),
+      }),
+      this.prisma.notification.count({ where }),
+    ]);
+    return {
+      items,
+      meta: {
+        total,
+        page: safePage,
+        limit: safeLimit,
+        totalPages: Math.ceil(total / safeLimit),
+      },
+    };
+  }
+
+  private positiveInteger(value: unknown, fallback: number) {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0
+      ? value
+      : fallback;
   }
 
   unreadCount(userId: number) {

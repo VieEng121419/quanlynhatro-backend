@@ -17,6 +17,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { RolesGuard } from 'src/auth/guards/roles.guard';
 import { GetNotificationsDto } from './dto/get-notifications.dto';
 import { PushSubscriptionDto } from './dto/push-subscription.dto';
+import { CreateGeneralNotificationDto } from './dto/create-general-notification.dto';
 import { NotificationService } from './notification.service';
 
 @Controller('notification')
@@ -24,6 +25,23 @@ import { NotificationService } from './notification.service';
 @Roles(Role.TENANT)
 export class NotificationController {
   constructor(private readonly service: NotificationService) {}
+  @Post('admin/general')
+  @Roles(Role.ADMIN, Role.STAFF)
+  createGeneral(@Body() dto: CreateGeneralNotificationDto) {
+    return this.service.createGeneral(dto.title, dto.message);
+  }
+
+  @Get('admin/history')
+  @Roles(Role.ADMIN, Role.STAFF)
+  history(@Query() query: GetNotificationsDto) {
+    return this.service.history(
+      query.page,
+      query.limit,
+      query.fromDate,
+      query.toDate,
+    );
+  }
+
   @Get() list(
     @CurrentUser('id') userId: number,
     @Query() query: GetNotificationsDto,

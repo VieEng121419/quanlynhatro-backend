@@ -22,6 +22,14 @@ export class AuthService {
     private jwtService: JwtService,
   ) {}
 
+  async listActiveTenants() {
+    return this.prisma.user.findMany({
+      where: { role: 'TENANT', isActive: true },
+      select: { id: true, userName: true, fullName: true, phoneNumber: true },
+      orderBy: { fullName: 'asc' },
+    });
+  }
+
   async register(dto: RegisterDto) {
     // 1. Kiểm tra userName đã tồn tại chưa
     const existingUser = await this.prisma.user.findUnique({
